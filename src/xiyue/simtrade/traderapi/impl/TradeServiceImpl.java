@@ -154,6 +154,8 @@ public class TradeServiceImpl extends TradeService {
             rj.setBIsLast(bIsLast);
             if(Optional.ofNullable(succRspMap).isPresent()){
                 rj.getRspMapList().add(succRspMap);
+            }else{
+                rj.setIsSucc(false);
             }
             rj.setErrMapList(errRspMap);
         }else{
@@ -161,6 +163,8 @@ public class TradeServiceImpl extends TradeService {
             rj.setBIsLast(bIsLast);
             if(Optional.ofNullable(succRspMap).isPresent()){
                 rj.getRspMapList().add(succRspMap);
+            }else{
+                rj.setIsSucc(false);
             }
             rj.setErrMapList(errRspMap);
             putResultJson(nRequestID, rj);
@@ -581,7 +585,74 @@ public class TradeServiceImpl extends TradeService {
 
 	@Override
 	public ResultJson ReqOrderAction(String orderSysID) {
-		return null;
+		ResultJson rj;
+    	if(!Optional.ofNullable(getUserInfo()).isPresent()){
+    		rj = new ResultJson();
+    		rj.setIsSucc(false);
+    		rj.setMessage("无法获取用户UserID=" + userId + ",请先登录！");
+    		rj.setErrorCode(-1);
+    		return rj;
+    	}
+    	try{
+    		int nRequestID ;
+    		lock();
+			try {
+                CShfeFtdcOrderActionField req = new CShfeFtdcOrderActionField();
+                req.setActionFlag('0');// 删除
+                req.setOrderSysID(orderSysID);
+                req.setParticipantID(userInfo.getParticipantID());
+                req.setUserID(userId);
+                req.setPNext(null);
+
+				//获取请求ID
+				nRequestID = setSynLatch();
+				traderApi.ReqOrderAction(req, nRequestID);
+				req.delete();
+			}finally {
+				unlock();
+            }
+			try {
+                long start = System.currentTimeMillis();
+                log.info("UserID=" + userId + " , jni ===> ReqOrderAction , nReuqestID=" + nRequestID + "，异步请求响应开始");
+                //等待异步消息
+                getSynLatchMap().get(nRequestID).await(60L ,TimeUnit.SECONDS);
+                log.info("UserID=" + userId + " , jni ===> ReqOrderAction , nReuqestID=" + nRequestID + "，异步请求响应耗时 ==> " + (System.currentTimeMillis() - start)+"ms");
+				//获取消息结果
+				rj = getRequestMap().get(nRequestID);
+				//获取结果完成，清除信息
+				afterGetInfoAndDel(nRequestID);
+				// 操作Redis数据库
+                if(rj.getIsSucc()){
+                    //注册监听器
+                    this.addListener(new XiyueListener() {
+                        @Override
+                        public void handleRedisEvent(RedisEvent e) {
+                            Map<String, Object> fields = e.getFields();
+                            System.out.println(fields);
+                        }
+                        @Override
+                        public void handleJPushEvent(JPushEvent e) {
+
+                        }
+                    });
+                    Map<String , Object> attrs = new HashMap<>();
+                    attrs.put("OrderStatus", "5");
+                    //更新数据库
+                    this.updateRedis(attrs);
+                }
+			} catch (InterruptedException e) {
+				rj = new ResultJson();
+		    	rj.setIsSucc(false);
+		    	rj.setMessage(e.getMessage());
+				log.error("ReqOrderAction==>latch.await错误", e);
+			}
+	    } catch (Exception ex) {
+	    	rj = new ResultJson();
+	    	rj.setIsSucc(false);
+	    	rj.setMessage(ex.getMessage());
+			log.error("ReqOrderAction出现错误，UserID=" + userId, ex);
+		}
+		return rj;
 	}
 
 	@Override
@@ -595,7 +666,7 @@ public class TradeServiceImpl extends TradeService {
     		return rj;
     	}
     	try{
-    		int nRequestID ; 
+    		int nRequestID ;
     		lock();
 			try {
 				CShfeFtdcReqQryWarrantDetailField req = new CShfeFtdcReqQryWarrantDetailField();
@@ -603,7 +674,7 @@ public class TradeServiceImpl extends TradeService {
 				req.setCommodityID("");
 				req.setWarValidity("");
 				req.setPNext(null);
-				
+
 				//获取请求ID
 				nRequestID = setSynLatch();
 				traderApi.ReqQryWarrantDetail(req, nRequestID);
@@ -677,7 +748,33 @@ public class TradeServiceImpl extends TradeService {
     @Override
 	public void OnRspOrderAction(CShfeFtdcOrderActionField pOrderAction, CShfeFtdcRspInfoField pRspInfo, int nRequestID,
 			boolean bIsLast) {
-		super.OnRspOrderAction(pOrderAction, pRspInfo, nRequestID, bIsLast);
+        Map<String, Object> succRspMap = null ;
+        Map<String, Object> errRspMap = null ;
+        lock();
+        try{
+            if (inexistErrorInfo(pRspInfo)) {
+                if (pOrderAction != null) {
+                    succRspMap = new  HashMap<>();
+                    succRspMap.put("ActionFlag", pOrderAction.getActionFlag());
+                    succRspMap.put("OrderSysID", StringUtils.trim(pOrderAction.getOrderSysID()));
+                    succRspMap.put("ParticipantID", StringUtils.trim(pOrderAction.getParticipantID()));
+                    succRspMap.put("UserID", StringUtils.trim(pOrderAction.getUserID()));
+                    //存放登陆完成用户信息
+                    setUserInfoModule(succRspMap, sessionId);
+                }
+            }else{
+                errRspMap = new HashMap<>();
+                errRspMap.put("ErrorID", pRspInfo.getErrorID());
+                errRspMap.put("ErrorMsg", pRspInfo.getErrorMsg());
+            }
+        }finally {
+            unlock();
+        }
+        handleRspInfo(nRequestID, succRspMap, errRspMap, bIsLast);
+        if (bIsLast) {
+            log.info("UserID=" + userId + " , jni ===> OnRspOrderAction , nReuqestID=" + nRequestID + "，异步请求响应结束");
+            getSynLatchMap().get(nRequestID).countDown();
+        }
 	}
 
 	@Override

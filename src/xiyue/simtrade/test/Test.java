@@ -6,6 +6,7 @@ import xiyue.simtrade.traderapi.impl.TradeServiceImpl;
 import xiyue.simtrade.traderapi.listener.JPushEvent;
 import xiyue.simtrade.traderapi.listener.RedisEvent;
 import xiyue.simtrade.traderapi.listener.XiyueListener;
+import xiyue.simtrade.traderapi.vo.ResultJson;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -24,7 +25,7 @@ public class Test {
         TradeServiceImpl tradeService = factory.getInstance(username, session);
 
         //登陆
-//        ResultJson resultJson = tradeService.ReqUserLogin(username, password);
+        ResultJson resultJson = tradeService.ReqUserLogin(username, password);
 
 //        resultJson = tradeService.ReqUserPasswordUpdate(username,"222222","111111");
 //        ResultJson ResultJson json = tradeService.ReqQryTradingAccount();
@@ -33,38 +34,9 @@ public class Test {
 //        ResultJson json = tradeService.ReqQryWarrantDetail();
 //        ResultJson json = tradeService.ReqQryOrder("");
 //        ResultJson json = tradeService.ReqQryTrade("");
-
-        tradeService.addListener(new XiyueListener() {
-            @Override
-            public void handleRedisEvent(RedisEvent e) {
-                System.out.println("插入redis" + e.getFields());
-            }
-
-            @Override
-            public void handleJPushEvent(JPushEvent e) {
-
-            }
-        });
-        Map<String,Object> map = new HashMap<>();
-        map.put("chen","yan");
-        tradeService.updateRedis(map);
+        ResultJson json = tradeService.ReqOrderAction("20161111111");
 
 
-        tradeService.addListener(new XiyueListener() {
-            @Override
-            public void handleRedisEvent(RedisEvent e) {
-                System.out.println("redis" + e.getFields());
-            }
-
-            @Override
-            public void handleJPushEvent(JPushEvent e) {
-
-            }
-        });
-        Map<String,Object> map2 = new HashMap<>();
-        map2.put("chen",123);
-        tradeService.updateRedis(map2);
-
-//        System.out.println(json.toString());
+        System.out.println(json.toString());
     }
 }
