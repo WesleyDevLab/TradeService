@@ -2,13 +2,12 @@ package xiyue.simtrade.traderapi.impl;
 
 import com.manyit.xytrade.traderapi.*;
 import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang.StringUtils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import xiyue.simtrade.traderapi.TradeService;
-import xiyue.simtrade.traderapi.listener.JPushEvent;
-import xiyue.simtrade.traderapi.listener.RedisEvent;
+import xiyue.simtrade.traderapi.listener.EventSource;
+import xiyue.simtrade.traderapi.listener.XiyueEvent;
 import xiyue.simtrade.traderapi.listener.XiyueListener;
 import xiyue.simtrade.traderapi.vo.ResultJson;
 import xiyue.simtrade.traderapi.vo.UserInfo;
@@ -43,7 +42,11 @@ public class TradeServiceImpl extends TradeService {
 	private Map<Integer,ResultJson>  requestMap = new ConcurrentHashMap<>(); // 请求信息集合
     @Getter
     private Map<Integer, CountDownLatch> synLatchMap = new ConcurrentHashMap<>();// 同步消息集合
-    
+
+    @Setter
+    @Getter
+    private EventSource source = new EventSource(); //事件源
+
    static{
    		//加载DLL文件
     	loadDll();
@@ -189,24 +192,7 @@ public class TradeServiceImpl extends TradeService {
         userInfo.setSessionID(sessionId);
     }
 
-    // 保存监听器引用
-    private List<XiyueListener> listeners = Collections.synchronizedList(new ArrayList<>());
-    // 注册监听器
-    public void addListener(XiyueListener listener){
-        listeners.add(listener);
-    }
-    public synchronized void updateRedis(Map<String, Object> fields){
-        RedisEvent e = new RedisEvent(this);
-        e.setFields(fields);
-        fieldsChanged(e,null);
-    }
-    private void fieldsChanged(RedisEvent re , JPushEvent je){
-        listeners.stream().forEach(listener -> {
-            listener.handleRedisEvent(re);
-            listener.handleJPushEvent(je);
-        });
-        listeners.clear();
-    }
+
 
     @Override
     public ResultJson ReqUserLogin(String userId, String password) {
@@ -622,23 +608,12 @@ public class TradeServiceImpl extends TradeService {
 				//获取结果完成，清除信息
 				afterGetInfoAndDel(nRequestID);
 				// 操作Redis数据库
-                if(rj.getIsSucc()){
-                    //注册监听器
-                    this.addListener(new XiyueListener() {
-                        @Override
-                        public void handleRedisEvent(RedisEvent e) {
-                            Map<String, Object> fields = e.getFields();
-                            System.out.println(fields);
-                        }
-                        @Override
-                        public void handleJPushEvent(JPushEvent e) {
-
-                        }
-                    });
+                if(!rj.getIsSucc()){
                     Map<String , Object> attrs = new HashMap<>();
                     attrs.put("OrderStatus", "5");
                     //更新数据库
-                    this.updateRedis(attrs);
+                    EventSource source = this.getSource();
+                    source.handleEvent(attrs, XiyueListener.REQ_ORDER_ACTION);
                 }
 			} catch (InterruptedException e) {
 				rj = new ResultJson();

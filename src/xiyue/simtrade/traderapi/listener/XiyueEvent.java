@@ -10,11 +10,11 @@ import java.util.Map;
 /**
  * Created by chenyan on 2017/5/23.
  */
-public class RedisEvent extends EventObject {
+public class XiyueEvent extends EventObject{
     /**
      * Constructs a prototypical Event.
      */
-    public RedisEvent(Object source) {
+    public XiyueEvent(Object source) {
         super(source);
     }
 
@@ -22,4 +22,7 @@ public class RedisEvent extends EventObject {
     @Getter
     private Map<String,Object> fields = new HashMap<>();
 
+    @Setter
+    @Getter
+    private String eventFunction;
 }

@@ -3,13 +3,10 @@ package xiyue.simtrade.test;
 import org.apache.log4j.PropertyConfigurator;
 import xiyue.simtrade.traderapi.TradeServiceFactory;
 import xiyue.simtrade.traderapi.impl.TradeServiceImpl;
-import xiyue.simtrade.traderapi.listener.JPushEvent;
-import xiyue.simtrade.traderapi.listener.RedisEvent;
-import xiyue.simtrade.traderapi.listener.XiyueListener;
+import xiyue.simtrade.traderapi.listener.EventSource;
+import xiyue.simtrade.traderapi.listener.JPushListener;
+import xiyue.simtrade.traderapi.listener.RedisListener;
 import xiyue.simtrade.traderapi.vo.ResultJson;
-
-import java.util.HashMap;
-import java.util.Map;
 
 /**
  * Created by chenyan on 2017/5/22.
@@ -23,6 +20,10 @@ public class Test {
         String session = "1";
         TradeServiceFactory factory = new TradeServiceFactory();
         TradeServiceImpl tradeService = factory.getInstance(username, session);
+        EventSource source = new EventSource();
+        source.addListener(new RedisListener());
+        source.addListener(new JPushListener());
+        tradeService.setSource(source);
 
         //登陆
         ResultJson resultJson = tradeService.ReqUserLogin(username, password);
@@ -34,6 +35,7 @@ public class Test {
 //        ResultJson json = tradeService.ReqQryWarrantDetail();
 //        ResultJson json = tradeService.ReqQryOrder("");
 //        ResultJson json = tradeService.ReqQryTrade("");
+
         ResultJson json = tradeService.ReqOrderAction("20161111111");
 
 
